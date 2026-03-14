@@ -55,6 +55,123 @@ function show(req, res) {
   });
 }
 
+async function store(req, res) {
+  const { title, content, image, tags } = req.body;
+  const validateTitle = (tit) => {
+    const tmpTitle = tit.toLowerCase();
+    return tmpTitle.charAt(0).toUpperCase() + tmpTitle.slice(1);
+  };
+
+  //validazione titolo
+  if (!title.trim() || typeof title != "string") {
+    return res.status(400).json({
+      success: false,
+      error: "Non hai inserito un titolo corretto",
+    });
+  }
+  //validazione content
+  if (!content.trim() || typeof content != "string") {
+    return res.status(400).json({
+      success: false,
+      error: "Non hai inserito un contenuto corretto",
+    });
+  }
+  //validazione image
+  if (!image.trim() || typeof image != "string") {
+    return res.status(400).json({
+      success: false,
+      error: "Non hai inserito un immagine corretta",
+    });
+  }
+
+  //validazione tags
+  if (!Array.isArray(tags) || tags.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Non hai inserito tag",
+    });
+  }
+  for (const el of tags) {
+    if (!el.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Inserisci dei tag validi",
+      });
+    }
+  }
+
+  //query
+  try {
+    //Verifico se il titolo è gia presente
+    const sqlTitle = "select title from posts where title=?";
+    const [resultsTitle] = await connection.promise().query(sqlTitle, [title]);
+    if (resultsTitle.length > 0) {
+      return res.json({
+        success: false,
+        error: "Titolo gia esistente",
+      });
+    }
+    //se il titolo non è presente vado ad inserire i 3 campi in posts
+    const sqlInsert = "insert into posts (title,content,image) values (?,?,?) ";
+    const validTitle = validateTitle(title);
+    const [resultsInsert] = await connection
+      .promise()
+      .query(sqlInsert, [validTitle, content, image]);
+
+    //ora devo gestire i tags
+    //verifico se sono da inserire e scarto quelli gia esistenti
+    //se presenti recupero gli id
+    const tagsIds = [];
+    const tagsDaInserire = [];
+    for (const el of tags) {
+      const sqlQuery = "select * from tags where label=?";
+      const [resultQuery] = await connection.promise().query(sqlQuery, [el]);
+      if (resultQuery.length === 0) {
+        tagsDaInserire.push(el);
+      } else {
+        tagsIds.push(resultQuery[0].id);
+      }
+    }
+
+    //vado ad inserire i tags nel db
+    //recupero id con insertId
+    for (const el of tagsDaInserire) {
+      const sqlInsertTag = "insert into tags (label) values(?)";
+      const [resultInstag] = await connection
+        .promise()
+        .query(sqlInsertTag, [el]);
+      tagsIds.push(resultInstag.insertId);
+    }
+
+    //ora devo collegare i dati nella tabella pivot
+    //devo recuperare id del posts e ogni id dei tags
+
+    //posso recuperare id post tramite insertId!
+    const idPost = resultsInsert.insertId;
+    //posso recupare in questo modo anche quelli dei tag?
+    //yes ma mi servono gli id già presenti se ce ne sono
+    //ok posso recuperli quando verifico se esistono
+
+    //vado a fare insert nella table pivot
+    for (const el of tagsIds) {
+      const sqlTmp = "insert into post_tag (post_id,tag_id) values(?,?)";
+      const [resultsUltimo] = await connection
+        .promise()
+        .query(sqlTmp, [idPost, el]);
+    }
+
+    res.json({
+      success: true,
+      message: "Inserito!",
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+    });
+  }
+}
+
 function destroy(req, res) {
   const id = req.params.id;
   const sql = "delete from posts where id=?";
@@ -77,4 +194,4 @@ function destroy(req, res) {
   });
 }
 
-module.exports = { index, show, destroy };
+module.exports = { index, show, store, destroy };
