@@ -62,44 +62,6 @@ async function store(req, res) {
     return tmpTitle.charAt(0).toUpperCase() + tmpTitle.slice(1);
   };
 
-  //validazione titolo
-  if (!title.trim() || typeof title != "string") {
-    return res.status(400).json({
-      success: false,
-      error: "Non hai inserito un titolo corretto",
-    });
-  }
-  //validazione content
-  if (!content.trim() || typeof content != "string") {
-    return res.status(400).json({
-      success: false,
-      error: "Non hai inserito un contenuto corretto",
-    });
-  }
-  //validazione image
-  if (!image.trim() || typeof image != "string") {
-    return res.status(400).json({
-      success: false,
-      error: "Non hai inserito un immagine corretta",
-    });
-  }
-
-  //validazione tags
-  if (!Array.isArray(tags) || tags.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: "Non hai inserito tag",
-    });
-  }
-  for (const el of tags) {
-    if (!el.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: "Inserisci dei tag validi",
-      });
-    }
-  }
-
   //query
   try {
     //Verifico se il titolo è gia presente
@@ -152,8 +114,10 @@ async function store(req, res) {
     //yes ma mi servono gli id già presenti se ce ne sono
     //ok posso recuperli quando verifico se esistono
 
+    //elimino eventuali id doppi
+    const tagsUni = [...new Set(tagsIds)];
     //vado a fare insert nella table pivot
-    for (const el of tagsIds) {
+    for (const el of tagsUni) {
       const sqlTmp = "insert into post_tag (post_id,tag_id) values(?,?)";
       const [resultsUltimo] = await connection
         .promise()
@@ -164,6 +128,87 @@ async function store(req, res) {
       success: true,
       message: "Inserito!",
     });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+    });
+  }
+}
+
+async function update(req, res) {
+  const { title, content, image, tags } = req.body;
+  const id = req.params.id;
+
+  const validateTitle = (tit) => {
+    const tmpTitle = tit.toLowerCase();
+    return tmpTitle.charAt(0).toUpperCase() + tmpTitle.slice(1);
+  };
+
+  const titleToInsert = validateTitle(title);
+
+  try {
+    //NON devo verificare se il titolo è gia presente
+    //Verifico ID
+    const sql = "select * from posts where id=?";
+    const [resultsId] = await connection.promise().query(sql, [id]);
+    if (resultsId.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Id not found",
+      });
+    }
+
+    //faccio update table posts
+    //gestisco i tags
+    //aggiorno table pivot
+    const sqlUpdate = "update posts set title=?,content=?,image=? where id=?";
+    const [resultUpdate] = await connection
+      .promise()
+      .query(sqlUpdate, [titleToInsert, content, image, id]);
+
+    //come gestisco i tags?
+    //ricontrollo i doppioni, aggiungo quelli nuovi
+
+    const tagIds = [];
+    const tasgDaIns = [];
+    for (const el of tags) {
+      const sqlQuery = "select * from tags where label=?";
+      const [resultQuery] = await connection.promise().query(sqlQuery, [el]);
+      if (resultQuery.length === 0) {
+        tasgDaIns.push(el);
+      } else {
+        tagIds.push(resultQuery[0].id);
+      }
+    }
+
+    for (const el of tasgDaIns) {
+      const sqlInsertTag = "insert into tags (label) values(?)";
+      const [resultInstag] = await connection
+        .promise()
+        .query(sqlInsertTag, [el]);
+      tagIds.push(resultInstag.insertId);
+    }
+
+    const tagsUni = [...new Set(tagIds)];
+    console.log(tagsUni);
+
+    //devo eliminare prima le vecchie relazioni
+    await connection
+      .promise()
+      .query("delete from post_tag where post_id=?", [id]);
+
+    //ora inserisco le nuove relazioni
+    for (const el of tagsUni) {
+      const sqlTmp = "insert into post_tag (post_id,tag_id) values(?,?)";
+      await connection.promise().query(sqlTmp, [id, el]);
+    }
+
+    res.json({
+      success: true,
+      message: "Update!",
+    });
+    //
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -194,4 +239,4 @@ function destroy(req, res) {
   });
 }
 
-module.exports = { index, show, store, destroy };
+module.exports = { index, show, store, update, destroy };
