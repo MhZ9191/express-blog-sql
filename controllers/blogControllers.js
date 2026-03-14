@@ -16,4 +16,26 @@ function index(req, res) {
   });
 }
 
-module.exports = { index };
+function destroy(req, res) {
+  const id = req.params.id;
+  const sql = "delete from posts where id=?";
+
+  connection.query(sql, [id], (err, resultsDel) => {
+    if (err)
+      return res.status(500).json({
+        success: false,
+        error: "Internal server error",
+      });
+
+    if (resultsDel.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Id not found",
+      });
+    }
+
+    res.status(204);
+  });
+}
+
+module.exports = { index, destroy };
