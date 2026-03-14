@@ -32,9 +32,25 @@ function show(req, res) {
         error: "Id not found",
       });
     }
-    res.json({
-      success: true,
-      results: resultsBlog[0],
+
+    const sqlTag =
+      "select p.title,t.label from posts as p inner join post_tag as pt on p.id=pt.post_id inner join tags as t on t.id=pt.tag_id where p.id=?";
+    connection.query(sqlTag, [id], (err, resultTags) => {
+      if (err)
+        return res.status(500).json({
+          success: false,
+          error: "Internal server error",
+        });
+      const tags = resultTags.reduce((ac, { label }) => {
+        ac.push(label);
+        return ac;
+      }, []);
+
+      resultsBlog[0].tags = [...tags];
+      res.json({
+        success: true,
+        results: resultsBlog,
+      });
     });
   });
 }
