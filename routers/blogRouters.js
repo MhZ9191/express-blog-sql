@@ -8,5 +8,6 @@ blog.get("/:id", controller.show);
 blog.delete("/:id", controller.destroy);
 blog.post("/", middle, controller.store);
 blog.put("/:id", middle, controller.update);
+blog.patch("/:id", middle, controller.modify);
 
 module.exports = blog;

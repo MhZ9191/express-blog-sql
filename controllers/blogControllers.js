@@ -217,6 +217,76 @@ async function update(req, res) {
   }
 }
 
+async function modify(req, res) {
+  const id = req.params.id;
+  const validateTitle = (tit) => {
+    const tmpTitle = tit.toLowerCase();
+    return tmpTitle.charAt(0).toUpperCase() + tmpTitle.slice(1);
+  };
+
+  try {
+    //title è da modificare? se presente lo modifico
+    if (req.body?.title) {
+      const newTitle = validateTitle(req.body.title);
+      const sqlTitle = "update posts set title=? where id=?";
+      await connection.promise().query(sqlTitle, [newTitle, id]);
+    }
+    //come title
+    if (req.body?.content) {
+      const sqlContent = "update posts set content=? where id=?";
+      await connection.promise().query(sqlContent, [req.body.content, id]);
+    }
+    //come title
+    if (req.body?.image) {
+      const sqlImage = "update posts set image=? where id=?";
+      await connection.promise().query(sqlImage, [req.body.image, id]);
+    }
+
+    //tags?
+    if (req.body?.tags) {
+      const { tags } = req.body;
+      const tagIds = [];
+      const tasgDaIns = [];
+      for (const el of tags) {
+        const sqlQuery = "select * from tags where label=?";
+        const [resultQuery] = await connection.promise().query(sqlQuery, [el]);
+        if (resultQuery.length === 0) {
+          tasgDaIns.push(el);
+        } else {
+          tagIds.push(resultQuery[0].id);
+        }
+      }
+
+      for (const el of tasgDaIns) {
+        const sqlInsertTag = "insert into tags (label) values(?)";
+        const [resultInstag] = await connection
+          .promise()
+          .query(sqlInsertTag, [el]);
+        tagIds.push(resultInstag.insertId);
+      }
+
+      const tagsUni = [...new Set(tagIds)];
+      console.log(tagsUni);
+
+      //devo eliminare prima le vecchie relazioni
+      await connection
+        .promise()
+        .query("delete from post_tag where post_id=?", [id]);
+
+      //ora inserisco le nuove relazioni
+      for (const el of tagsUni) {
+        const sqlTmp = "insert into post_tag (post_id,tag_id) values(?,?)";
+        await connection.promise().query(sqlTmp, [id, el]);
+      }
+    }
+
+    res.json({
+      succes: true,
+      message: "Modify!",
+    });
+  } catch (err) {}
+}
+
 function destroy(req, res) {
   const id = req.params.id;
   const sql = "delete from posts where id=?";
@@ -239,4 +309,4 @@ function destroy(req, res) {
   });
 }
 
-module.exports = { index, show, store, update, destroy };
+module.exports = { index, show, store, update, modify, destroy };
